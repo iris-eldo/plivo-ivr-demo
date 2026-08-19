@@ -43,6 +43,15 @@ app = Flask(__name__)
 
 XML_HEADERS = {"Content-Type": "text/xml"}
 
+# In-memory call-state tracker, purely for driving the frontend's flow
+# indicator. Plivo webhooks (/answer, /otp, /language, /action) happen
+# server-to-server -- the browser tab has no visibility into them on its
+# own, so we stash the latest step here and let the frontend poll
+# /call-status to find out where the live call actually is. A single
+# global is fine for this single-call demo (no concurrency/database
+# needed); a real multi-call app would key this by CallUUID instead.
+call_state = {"step": "idle"}
+
 COPY = {
     "en": {
         "otp_prompt": "Welcome to Inspire Works. Please enter your 4 digit O T P.",
@@ -125,6 +134,8 @@ def trigger_call():
     data = request.get_json(silent=True) or {}
     to_number = data.get("to") or config.TARGET_PHONE_NUMBER
 
+    call_state["step"] = "dialing"
+
     client = plivo.RestClient(config.PLIVO_AUTH_ID, config.PLIVO_AUTH_TOKEN)
     response = client.calls.create(
         from_=config.PLIVO_FROM_NUMBER,
@@ -143,6 +154,7 @@ def trigger_call():
 
 @app.route("/answer", methods=["GET", "POST"])
 def answer():
+    call_state["step"] = "otp"
     return otp_prompt_xml(error=False), 200, XML_HEADERS
 
 
@@ -150,8 +162,10 @@ def answer():
 def otp():
     digits = request.values.get("Digits", "")
     if digits == config.OTP_CODE:
+        call_state["step"] = "language"
         return language_menu_xml(error=False), 200, XML_HEADERS
     # Wrong OTP (or no digits captured) -> re-prompt, this is the loop.
+    call_state["step"] = "otp_retry"
     return otp_prompt_xml(error=True), 200, XML_HEADERS
 
 
@@ -159,8 +173,10 @@ def otp():
 def language():
     digits = request.values.get("Digits", "")
     if digits == "1":
+        call_state["step"] = "action"
         return action_menu_xml("en", error=False), 200, XML_HEADERS
     if digits == "2":
+        call_state["step"] = "action"
         return action_menu_xml("es", error=False), 200, XML_HEADERS
     return language_menu_xml(error=True), 200, XML_HEADERS
 
@@ -172,6 +188,7 @@ def action():
     c = COPY.get(lang, COPY["en"])
 
     if digits == "1":
+        call_state["step"] = "done"
         xml = (
             f"<Response>"
             f"<Play>{config.AUDIO_MESSAGE_URL}</Play>"
@@ -182,6 +199,7 @@ def action():
         return xml, 200, XML_HEADERS
 
     if digits == "2":
+        call_state["step"] = "done"
         xml = (
             f"<Response>"
             f"<Speak>{c['connecting']}</Speak>"
@@ -193,8 +211,17 @@ def action():
     return action_menu_xml(lang, error=True), 200, XML_HEADERS
 
 
+@app.route("/call-status", methods=["GET"])
+def call_status():
+    """Polled by the frontend to drive the flow indicator, since the
+    browser has no direct visibility into the server-to-server Plivo
+    webhooks that actually advance the call."""
+    return jsonify(call_state)
+
+
 @app.route("/", methods=["GET"])
 def index():
+    call_state["step"] = "idle"
     return render_template("index.html")
 
 

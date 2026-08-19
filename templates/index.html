@@ -205,12 +205,70 @@
   </div>
 
   <script>
-    function setFlow(activeIndex) {
+    // Maps the server-side call_state["step"] (see /call-status in app.py)
+    // to a flow-indicator index. The phone call itself progresses via
+    // Plivo hitting the server directly (/otp, /language, /action) --
+    // this browser tab only finds out via polling, it's not in that loop.
+    const STEP_INDEX = {
+      idle: -1,
+      dialing: 0,
+      otp: 1,
+      otp_retry: 1,
+      language: 2,
+      action: 3,
+      done: 3,
+    };
+
+    let pollTimer = null;
+
+    function setFlow(activeIndex, { doneOverride = false } = {}) {
       document.querySelectorAll('.flow-step').forEach((el, i) => {
         el.classList.remove('active', 'done');
         if (i < activeIndex) el.classList.add('done');
-        if (i === activeIndex) el.classList.add('active');
+        if (i === activeIndex) el.classList.add(doneOverride ? 'done' : 'active');
       });
+    }
+
+    function stopPolling() {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    function startPolling() {
+      stopPolling();
+      pollTimer = setInterval(async () => {
+        try {
+          const res = await fetch('/call-status');
+          const data = await res.json();
+          const idx = STEP_INDEX[data.step] ?? -1;
+          const status = document.getElementById('status');
+
+          if (data.step === 'otp_retry') {
+            status.className = 'show err';
+            status.innerHTML = '<span class="label">Wrong OTP entered</span>Re-prompting on the call…';
+          } else if (data.step === 'otp') {
+            status.className = 'show ok';
+            status.innerHTML = '<span class="label">Call answered</span>Waiting for OTP entry…';
+          } else if (data.step === 'language') {
+            status.className = 'show ok';
+            status.innerHTML = '<span class="label">OTP verified</span>Waiting for language selection…';
+          } else if (data.step === 'action') {
+            status.className = 'show ok';
+            status.innerHTML = '<span class="label">Language selected</span>Waiting for menu choice…';
+          } else if (data.step === 'done') {
+            status.className = 'show ok';
+            status.innerHTML = '<span class="label">Call flow complete</span>Audio played or call forwarded.';
+          }
+
+          setFlow(idx, { doneOverride: data.step === 'done' });
+
+          if (data.step === 'done') stopPolling();
+        } catch (e) {
+          // transient poll failure -- just try again next tick
+        }
+      }, 1000);
     }
 
     async function triggerCall() {
@@ -237,7 +295,8 @@
         } else {
           status.className = 'show ok';
           status.innerHTML = '<span class="label">Call initiated</span>To ' + data.to + '\nRequest UUID: ' + data.request_uuid;
-          setFlow(1);
+          setFlow(0);
+          startPolling();
         }
       } catch (e) {
         status.className = 'show err';
