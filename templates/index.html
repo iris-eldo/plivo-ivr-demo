@@ -2,26 +2,227 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plivo IVR Demo</title>
 <style>
-  body { font-family: -apple-system, sans-serif; max-width: 480px; margin: 80px auto; text-align: center; }
-  button { font-size: 16px; padding: 12px 24px; cursor: pointer; border-radius: 8px; border: none; background: #111; color: #fff; }
-  button:disabled { opacity: 0.5; cursor: default; }
-  #status { margin-top: 20px; font-size: 14px; color: #444; white-space: pre-wrap; }
+  :root {
+    --bg-1: #0f172a;
+    --bg-2: #1e293b;
+    --accent: #6366f1;
+    --accent-2: #8b5cf6;
+    --text: #f1f5f9;
+    --text-dim: #94a3b8;
+    --card: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.08);
+    --success: #22c55e;
+    --error: #ef4444;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    background: var(--bg-1);
+    color: var(--text);
+    padding: 24px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 560px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 48px 44px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    background: rgba(139,92,246,0.12);
+    border: 1px solid rgba(139,92,246,0.25);
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+  }
+
+  .badge svg { width: 12px; height: 12px; }
+
+  h1 {
+    font-size: 30px;
+    margin: 0 0 10px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+
+  p.subtitle {
+    color: var(--text-dim);
+    font-size: 16px;
+    margin: 0 0 36px;
+    line-height: 1.6;
+  }
+
+  .flow {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 36px;
+    gap: 8px;
+  }
+
+  .flow-step {
+    flex: 1;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+    position: relative;
+  }
+
+  .flow-step .dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    margin: 0 auto 10px;
+    transition: background 0.3s;
+  }
+
+  .flow-step.active .dot { background: var(--accent-2); box-shadow: 0 0 0 5px rgba(139,92,246,0.2); }
+  .flow-step.done .dot { background: var(--success); }
+  .flow-step.active { color: var(--text); }
+
+  button {
+    width: 100%;
+    font-size: 18px;
+    font-weight: 600;
+    padding: 18px 24px;
+    cursor: pointer;
+    border-radius: 14px;
+    border: none;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(99,102,241,0.35);
+  }
+
+  button:active:not(:disabled) { transform: translateY(0); }
+
+  button:disabled { opacity: 0.6; cursor: default; }
+
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+
+  button.loading .spinner { display: inline-block; }
+  button.loading .btn-label { display: none; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #status {
+    margin-top: 22px;
+    padding: 18px 20px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.6;
+    display: none;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  #status.show { display: block; }
+  #status.ok { border-color: rgba(34,197,94,0.35); background: rgba(34,197,94,0.08); }
+  #status.err { border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.08); }
+
+  #status .label {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  #status.ok .label { color: var(--success); }
+  #status.err .label { color: var(--error); }
+
+  .meta {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-dim);
+    text-align: center;
+  }
 </style>
 </head>
 <body>
-  <h2>Plivo IVR Demo</h2>
-  <p>Click below to trigger the outbound call to the number configured in <code>.env</code>.</p>
-  <button id="callBtn" onclick="triggerCall()">Call Me</button>
-  <div id="status"></div>
+  <div class="card">
+    <span class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+      Plivo Voice API
+    </span>
+    <h1>InspireWorks IVR Demo</h1>
+    <p class="subtitle">Places an outbound call, verifies you with an OTP, then walks you through a two-level voice menu.</p>
+
+    <div class="flow">
+      <div class="flow-step" data-step="call"><div class="dot"></div>Call</div>
+      <div class="flow-step" data-step="otp"><div class="dot"></div>OTP</div>
+      <div class="flow-step" data-step="lang"><div class="dot"></div>Language</div>
+      <div class="flow-step" data-step="action"><div class="dot"></div>Action</div>
+    </div>
+
+    <button id="callBtn" onclick="triggerCall()">
+      <span class="spinner"></span>
+      <span class="btn-label">📞 Call Me Now</span>
+    </button>
+
+    <div id="status"></div>
+
+    <div class="meta">Calls the number configured in <code>.env</code></div>
+  </div>
 
   <script>
+    function setFlow(activeIndex) {
+      document.querySelectorAll('.flow-step').forEach((el, i) => {
+        el.classList.remove('active', 'done');
+        if (i < activeIndex) el.classList.add('done');
+        if (i === activeIndex) el.classList.add('active');
+      });
+    }
+
     async function triggerCall() {
       const btn = document.getElementById('callBtn');
       const status = document.getElementById('status');
+
       btn.disabled = true;
-      status.textContent = 'Triggering call...';
+      btn.classList.add('loading');
+      status.className = 'show';
+      status.innerHTML = '<span class="label">Dialing…</span>Sending the request to Plivo.';
+      setFlow(0);
+
       try {
         const res = await fetch('/trigger-call', {
           method: 'POST',
@@ -29,15 +230,21 @@
           body: JSON.stringify({})
         });
         const data = await res.json();
+
         if (!res.ok) {
-          status.textContent = 'Error: ' + (data.message || JSON.stringify(data));
+          status.className = 'show err';
+          status.innerHTML = '<span class="label">Call failed</span>' + (data.message || JSON.stringify(data));
         } else {
-          status.textContent = 'Call initiated to ' + data.to + '\nRequest UUID: ' + data.request_uuid;
+          status.className = 'show ok';
+          status.innerHTML = '<span class="label">Call initiated</span>To ' + data.to + '\nRequest UUID: ' + data.request_uuid;
+          setFlow(1);
         }
       } catch (e) {
-        status.textContent = 'Request failed: ' + e;
+        status.className = 'show err';
+        status.innerHTML = '<span class="label">Request failed</span>' + e;
       } finally {
         btn.disabled = false;
+        btn.classList.remove('loading');
       }
     }
   </script>
