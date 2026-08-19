@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Plivo IVR Demo</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 480px; margin: 80px auto; text-align: center; }
+  button { font-size: 16px; padding: 12px 24px; cursor: pointer; border-radius: 8px; border: none; background: #111; color: #fff; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #status { margin-top: 20px; font-size: 14px; color: #444; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h2>Plivo IVR Demo</h2>
+  <p>Click below to trigger the outbound call to the number configured in <code>.env</code>.</p>
+  <button id="callBtn" onclick="triggerCall()">Call Me</button>
+  <div id="status"></div>
+
+  <script>
+    async function triggerCall() {
+      const btn = document.getElementById('callBtn');
+      const status = document.getElementById('status');
+      btn.disabled = true;
+      status.textContent = 'Triggering call...';
+      try {
+        const res = await fetch('/trigger-call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          status.textContent = 'Error: ' + (data.message || JSON.stringify(data));
+        } else {
+          status.textContent = 'Call initiated to ' + data.to + '\nRequest UUID: ' + data.request_uuid;
+        }
+      } catch (e) {
+        status.textContent = 'Request failed: ' + e;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
